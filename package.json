@@ -1,0 +1,47 @@
+{
+  "name": "lesson-frame",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "render:demo": "remotion render src/remotion/index.ts LessonVideo out/demo.mp4 --props=fixtures/demo-project.json"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1141.0",
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
+    "@google/genai": "^2.24.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "@remotion/bundler": "^4.0.529",
+    "@remotion/player": "^4.0.529",
+    "@remotion/renderer": "^4.0.529",
+    "geist": "^1.7.2",
+    "katex": "^0.18.9",
+    "next": "^16.3.6",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.529",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.2.11",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/katex": "^0.16.8",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.6",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  }
+}

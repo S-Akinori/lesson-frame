@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+public/renders
+.env
+.env.local
+.env.example
+*.log
+coverage
+.playwright-cli
+output
+tsconfig.tsbuildinfo

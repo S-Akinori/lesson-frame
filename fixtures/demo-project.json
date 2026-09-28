@@ -1,0 +1,35 @@
+{
+  "project": {
+    "id": "demo-project",
+    "title": "気体の状態方程式",
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "gapInSeconds": 0.15,
+    "voice": "Kore",
+    "voiceStyle": "テンポよく、落ち着いたトーンで親しみやすい口調で解説する。",
+    "theme": {
+      "background": "blueprint",
+      "accent": "#c45d45",
+      "showMainText": true
+    },
+    "chunks": [
+      {
+        "id": "demo-1",
+        "order": 0,
+        "displayText": "状態方程式は $PV=nRT$ です。",
+        "speechText": "状態方程式は、ピー ブイ イコール エヌ アール ティーです。",
+        "durationInSeconds": 4,
+        "status": "draft"
+      },
+      {
+        "id": "demo-2",
+        "order": 1,
+        "displayText": "圧力、体積、物質量、温度の関係を一つの式で確認できます。",
+        "speechText": "圧力、体積、物質量、温度の関係を一つの式で確認できます。",
+        "durationInSeconds": 5,
+        "status": "draft"
+      }
+    ]
+  }
+}
