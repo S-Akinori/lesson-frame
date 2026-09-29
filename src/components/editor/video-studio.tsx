@@ -62,6 +62,14 @@ const fileSha256 = async (file: File) => {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
+const r2UploadErrorMessage = (subject: string, error: unknown) => {
+  const detail = error instanceof Error && error.message ? error.message : "不明なエラー";
+  if (/failed to fetch|network|load failed/i.test(detail)) {
+    return `${subject}をR2へ送信できませんでした。R2のCORSで、このサイトのURLとPUT / Content-Typeが許可されているか確認してください。`;
+  }
+  return `${subject}をR2へ保存できませんでした：${detail}`;
+};
+
 const imageValidationError = (file: File) => {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
     return "PNG、JPEG、WebP画像を選択してください。";
@@ -480,6 +488,7 @@ export function VideoStudio() {
 
     const chunkId = selected.id;
     let usedBrowserPreview = false;
+    let uploadFailure = "";
     let reusedCount = 0;
     for (const file of files) {
       const localUrl = await readFileAsDataUrl(file);
@@ -522,12 +531,13 @@ export function VideoStudio() {
             contentHash,
           }).catch(() => undefined);
         }
-      } catch {
+      } catch (error) {
         usedBrowserPreview = true;
+        uploadFailure ||= r2UploadErrorMessage("画像", error);
       }
     }
     setNotice(usedBrowserPreview
-      ? {kind: "info", message: "R2未設定の画像は、このブラウザ内でプレビューします。"}
+      ? {kind: "error", message: `${uploadFailure} このブラウザ内ではプレビューを継続します。`}
       : {kind: "success", message: reusedCount
           ? `${files.length}件を追加しました。${reusedCount}件は同一素材の再アップロードを省略しました。`
           : `${files.length}件の画像を保存しました。`});
@@ -580,8 +590,8 @@ export function VideoStudio() {
         }).catch(() => undefined);
       }
       setNotice({kind: "success", message: result.duplicate ? "同一素材があるため再アップロードせず、共有素材を背景に設定しました。" : "背景画像をR2へ保存しました。"});
-    } catch {
-      setNotice({kind: "info", message: "R2未設定のため、背景画像はこのブラウザ内でプレビューします。"});
+    } catch (error) {
+      setNotice({kind: "error", message: `${r2UploadErrorMessage("背景画像", error)} このブラウザ内ではプレビューを継続します。`});
     } finally {
       event.target.value = "";
     }
@@ -635,8 +645,8 @@ export function VideoStudio() {
         }).catch(() => undefined);
       }
       setNotice({kind: "success", message: result.duplicate ? "同一BGMがあるため再アップロードせず、共有BGMを設定しました。" : "BGMをR2へ保存しました。"});
-    } catch {
-      setNotice({kind: "info", message: "R2未設定のため、BGMはこのブラウザ内でプレビューします。"});
+    } catch (error) {
+      setNotice({kind: "error", message: `${r2UploadErrorMessage("BGM", error)} このブラウザ内ではプレビューを継続します。`});
     } finally {
       event.target.value = "";
     }

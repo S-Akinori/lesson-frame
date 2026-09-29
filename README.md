@@ -55,6 +55,25 @@ R2_PUBLIC_BASE_URL=
 
 `R2_PUBLIC_BASE_URL`は任意です。未設定時は期限付き読み取りURLを発行します。R2未設定の開発環境では画像・音声をブラウザ内に保持し、完成MP4を`public/renders`へ保存します。本番環境のMP4出力にはR2設定が必要です。
 
+ブラウザから署名付きURLへ直接アップロードするため、R2バケットのCORSにはローカルURLと本番URLを登録してください。
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3000",
+      "https://your-project.vercel.app"
+    ],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+独自ドメインを利用する場合は、そのオリジンも`AllowedOrigins`へ追加します。環境変数やCORSを変更した後は、Vercelを再デプロイしてください。
+
 ## コマンド
 
 ```bash
