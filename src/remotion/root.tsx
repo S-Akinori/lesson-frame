@@ -1,5 +1,6 @@
 import {Composition} from "remotion";
 import {LessonComposition} from "../components/video/lesson-composition";
+import {totalDurationInFrames} from "../lib/script";
 import type {LessonProject} from "../lib/types";
 
 const defaultProject: LessonProject = {
@@ -33,10 +34,7 @@ export function RemotionRoot() {
       durationInFrames={150}
       defaultProps={{project: defaultProject}}
       calculateMetadata={({props}) => ({
-        durationInFrames: Math.max(1, Math.ceil(props.project.chunks.reduce(
-          (sum, chunk) => sum + chunk.durationInSeconds + props.project.gapInSeconds,
-          0,
-        ) * props.project.fps)),
+        durationInFrames: totalDurationInFrames(props.project.chunks, props.project.gapInSeconds, props.project.fps),
         fps: props.project.fps,
         width: props.project.width,
         height: props.project.height,

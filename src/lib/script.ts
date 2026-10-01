@@ -55,6 +55,17 @@ export const parseScript = (script: string, previous: LessonChunk[] = []): Lesso
 export const totalDuration = (chunks: LessonChunk[], gapInSeconds: number) =>
   chunks.reduce((sum, chunk) => sum + chunk.durationInSeconds + gapInSeconds, 0);
 
+export const chunkDurationInFrames = (chunk: LessonChunk, gapInSeconds: number, fps: number) =>
+  Math.max(1, Math.ceil((chunk.durationInSeconds + gapInSeconds) * fps));
+
+export const chunkStartFrame = (chunks: LessonChunk[], index: number, gapInSeconds: number, fps: number) =>
+  chunks
+    .slice(0, Math.max(0, index))
+    .reduce((sum, chunk) => sum + chunkDurationInFrames(chunk, gapInSeconds, fps), 0);
+
+export const totalDurationInFrames = (chunks: LessonChunk[], gapInSeconds: number, fps: number) =>
+  Math.max(1, chunks.reduce((sum, chunk) => sum + chunkDurationInFrames(chunk, gapInSeconds, fps), 0));
+
 export const formatDuration = (seconds: number) => {
   const value = Math.max(0, Math.round(seconds));
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;

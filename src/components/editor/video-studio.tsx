@@ -3,13 +3,13 @@
 import {Player} from "@remotion/player";
 import Image from "next/image";
 import {
-  ArrowDown, ArrowUp, CheckCircle, DownloadSimple, FileImage, FilmSlate,
+  ArrowDown, ArrowsOutCardinal, ArrowUp, CheckCircle, DownloadSimple, FileImage, FilmSlate,
   GearSix, LinkSimple, MagicWand, MusicNotes, Play, Plus, SpeakerHigh,
   SpinnerGap, Trash, UploadSimple, WarningCircle, Waveform,
 } from "@phosphor-icons/react";
 import {useEffect, useRef, useState} from "react";
 import type {ChangeEvent} from "react";
-import {LessonComposition} from "@/components/video/lesson-composition";
+import {LessonComposition, MAIN_TEXT_ELEMENT_ID} from "@/components/video/lesson-composition";
 import {
   parseProjectFile,
   projectFileErrorMessage,
@@ -17,8 +17,9 @@ import {
   serializeProjectFile,
 } from "@/lib/project-file";
 import {projectSchema} from "@/lib/project-schema";
-import {estimateDuration, formatDuration, parseScript, toSpeechText, totalDuration} from "@/lib/script";
-import type {LessonChunk, LessonProject, ProjectTemplate, ReusableAsset} from "@/lib/types";
+import {defaultImageLayout, defaultTextBlockLayout, videoFontOptions} from "@/lib/scene-layout";
+import {chunkStartFrame, estimateDuration, formatDuration, parseScript, toSpeechText, totalDuration, totalDurationInFrames} from "@/lib/script";
+import type {LessonChunk, LessonImage, LessonProject, LessonTextBlock, ProjectTemplate, ReusableAsset} from "@/lib/types";
 import {GEMINI_VOICES, VOICE_STYLE_EXAMPLES} from "@/lib/voices";
 
 const sampleScript = `今日は気体の状態方程式について説明します。
@@ -107,6 +108,8 @@ export function VideoStudio() {
   const [assetLibrary, setAssetLibrary] = useState<ReusableAsset[]>([]);
   const [templateName, setTemplateName] = useState("");
   const [inspectorTab, setInspectorTab] = useState<"script" | "image">("script");
+  const [selectedAssetIndex, setSelectedAssetIndex] = useState(0);
+  const [selectedTextBlockId, setSelectedTextBlockId] = useState("");
   const [generateOnSetup, setGenerateOnSetup] = useState(true);
   const [isPreparing, setIsPreparing] = useState(false);
   const [saveState, setSaveState] = useState<"読み込み中" | "保存中" | "保存済み" | "ローカル保存">("読み込み中");
@@ -122,11 +125,13 @@ export function VideoStudio() {
 
   const selected = project.chunks.find((chunk) => chunk.id === selectedId) ?? project.chunks[0];
   const duration = totalDuration(project.chunks, project.gapInSeconds);
-  const durationInFrames = Math.max(1, Math.ceil(duration * project.fps));
+  const durationInFrames = totalDurationInFrames(project.chunks, project.gapInSeconds, project.fps);
   const selectedVoiceId = selected?.voice ?? project.voice;
   const selectedVoiceStyle = selected?.voiceStyle ?? project.voiceStyle;
   const selectedVoice = GEMINI_VOICES.find((voice) => voice.id === selectedVoiceId);
   const selectedAssets = selected ? [...(selected.asset ? [selected.asset] : []), ...(selected.assets ?? [])] : [];
+  const selectedTextColor = selected?.textStyle?.color ?? (project.theme.background === "paper" && !project.theme.backgroundImage ? "#1d272b" : "#ffffff");
+  const selectedTextLayout = selected?.textLayout ?? defaultTextBlockLayout();
   const imageLibrary = assetLibrary.filter((asset) => asset.kind === "image");
   const audioLibrary = assetLibrary.filter((asset) => asset.kind === "audio");
   const readyCount = project.chunks.filter((chunk) => chunk.audio).length;
@@ -245,11 +250,11 @@ export function VideoStudio() {
 
   const selectChunk = (id: string) => {
     const index = project.chunks.findIndex((chunk) => chunk.id === id);
-    const startInSeconds = project.chunks
-      .slice(0, Math.max(0, index))
-      .reduce((sum, chunk) => sum + chunk.durationInSeconds + project.gapInSeconds, 0);
     setSelectedId(id);
-    playerRef.current?.seekTo(Math.floor(startInSeconds * project.fps));
+    setSelectedAssetIndex(0);
+    setSelectedTextBlockId("");
+    playerRef.current?.pause();
+    playerRef.current?.seekTo(chunkStartFrame(project.chunks, index, project.gapInSeconds, project.fps));
   };
 
   const startNewProject = () => {
@@ -447,21 +452,39 @@ export function VideoStudio() {
       setNotice({kind: "error", message: "1シーンに追加できるテキストは10件までです。"});
       return;
     }
-    updateChunk(selected.id, {textBlocks: [...textBlocks, {id: crypto.randomUUID(), text: "追加テキスト"}]});
+    const id = crypto.randomUUID();
+    updateChunk(selected.id, {textBlocks: [...textBlocks, {id, text: "追加テキスト"}]});
+    setSelectedTextBlockId(id);
+    setSelectedAssetIndex(-1);
   };
 
-  const updateTextBlock = (id: string, text: string) => {
+  const updateTextBlock = (id: string, patch: Partial<LessonTextBlock>) => {
     if (!selected) return;
-    updateChunk(selected.id, {textBlocks: (selected.textBlocks ?? []).map((block) => block.id === id ? {...block, text} : block)});
+    updateChunk(selected.id, {textBlocks: (selected.textBlocks ?? []).map((block) => block.id === id ? {...block, ...patch} : block)});
   };
 
   const removeTextBlock = (id: string) => {
     if (!selected) return;
-    updateChunk(selected.id, {textBlocks: (selected.textBlocks ?? []).filter((block) => block.id !== id)});
+    const nextBlocks = (selected.textBlocks ?? []).filter((block) => block.id !== id);
+    updateChunk(selected.id, {textBlocks: nextBlocks});
+    if (selectedTextBlockId === id) setSelectedTextBlockId(nextBlocks[0]?.id ?? "");
+  };
+
+  const updateSceneAsset = (index: number, patch: Partial<LessonImage>) => {
+    if (!selected) return;
+    if (selected.asset && index === 0) {
+      updateChunk(selected.id, {asset: {...selected.asset, ...patch}});
+      return;
+    }
+    const assetIndex = index - (selected.asset ? 1 : 0);
+    updateChunk(selected.id, {
+      assets: (selected.assets ?? []).map((asset, currentIndex) => currentIndex === assetIndex ? {...asset, ...patch} : asset),
+    });
   };
 
   const removeSceneAsset = (index: number) => {
     if (!selected) return;
+    setSelectedAssetIndex((current) => Math.max(0, Math.min(current, selectedAssets.length - 2)));
     if (selected.asset && index === 0) {
       updateChunk(selected.id, {asset: undefined});
       return;
@@ -1011,7 +1034,39 @@ export function VideoStudio() {
           </div>
           <div className="player-frame">
             {project.chunks.length ? (
-              <Player ref={playerRef} component={LessonComposition} inputProps={{project}} durationInFrames={durationInFrames} compositionWidth={project.width} compositionHeight={project.height} fps={project.fps} controls style={{width: "100%", aspectRatio: "16 / 9"}} acknowledgeRemotionLicense />
+              <Player
+                ref={playerRef}
+                component={LessonComposition}
+                inputProps={{
+                  project,
+                  editableChunkId: selected?.id,
+                  editableAssetIndex: selectedAssetIndex,
+                  editableTextBlockId: selectedTextBlockId,
+                  onAssetLayoutChange: (index, layout) => updateSceneAsset(index, {layout}),
+                  onAssetSelect: (index) => {
+                    playerRef.current?.pause();
+                    setSelectedAssetIndex(index);
+                    setSelectedTextBlockId("");
+                  },
+                  onMainTextLayoutChange: (layout) => selected && updateChunk(selected.id, {textLayout: layout}),
+                  onMainTextStyleChange: (style) => selected && updateChunk(selected.id, {textStyle: style}),
+                  onTextBlockLayoutChange: (id, layout) => updateTextBlock(id, {layout}),
+                  onTextBlockStyleChange: (id, style) => updateTextBlock(id, {style}),
+                  onTextBlockSelect: (id) => {
+                    playerRef.current?.pause();
+                    setSelectedTextBlockId(id);
+                    setSelectedAssetIndex(-1);
+                  },
+                }}
+                durationInFrames={durationInFrames}
+                compositionWidth={project.width}
+                compositionHeight={project.height}
+                fps={project.fps}
+                controls
+                clickToPlay={false}
+                style={{width: "100%", aspectRatio: "16 / 9"}}
+                acknowledgeRemotionLicense
+              />
             ) : <div className="player-empty">台本を入力してください</div>}
           </div>
           <div className="transport-bar">
@@ -1056,8 +1111,72 @@ export function VideoStudio() {
 
                 <div className="form-group">
                   <div className="field-heading"><label htmlFor="display-text">表示テキスト</label><span>{selected.displayText.length}/300</span></div>
-                  <textarea id="display-text" className="field text-area text-area--display" maxLength={300} value={selected.displayText} onChange={(event) => updateChunk(selected.id, {displayText: event.target.value, status: "draft"})} />
+                  <textarea id="display-text" className="field text-area text-area--display" maxLength={300} value={selected.displayText} onFocus={() => { setSelectedTextBlockId(MAIN_TEXT_ELEMENT_ID); setSelectedAssetIndex(-1); }} onChange={(event) => updateChunk(selected.id, {displayText: event.target.value, status: "draft"})} />
                   <p className="field-help">数式は <code>$PV=nRT$</code> または <code>$$...$$</code> で入力できます。</p>
+                </div>
+
+                <div className={`text-style-panel ${selectedTextBlockId === MAIN_TEXT_ELEMENT_ID ? "is-selected" : ""}`} aria-label="テキストスタイル">
+                  <div className="text-style-panel__heading">
+                    <strong>テキストスタイル</strong>
+                    <button type="button" onClick={() => updateChunk(selected.id, {textStyle: undefined, textLayout: undefined})}>初期値に戻す</button>
+                  </div>
+                  <div className="text-style-grid">
+                    <label className="style-field style-field--wide">
+                      <span><strong>文字サイズ</strong><output>{selected.textStyle?.fontSize ?? "自動"}</output></span>
+                      <div className="range-number-control">
+                        <input
+                          type="range"
+                          min="24"
+                          max="120"
+                          step="1"
+                          list="text-size-ticks"
+                          value={selected.textStyle?.fontSize ?? 60}
+                          onChange={(event) => updateChunk(selected.id, {textStyle: {...selected.textStyle, fontSize: Number(event.target.value)}})}
+                        />
+                        <input
+                          className="numeric-field"
+                          type="number"
+                          min="24"
+                          max="120"
+                          step="1"
+                          aria-label="文字サイズの数値"
+                          value={selected.textStyle?.fontSize ?? 60}
+                          onChange={(event) => updateChunk(selected.id, {textStyle: {...selected.textStyle, fontSize: Math.min(120, Math.max(24, Number(event.target.value) || 24))}})}
+                        />
+                        <datalist id="text-size-ticks"><option value="24" /><option value="48" /><option value="72" /><option value="96" /><option value="120" /></datalist>
+                      </div>
+                    </label>
+                    <label className="style-field">
+                      <span><strong>フォント</strong></span>
+                      <select className="field" value={selected.textStyle?.fontFamily ?? "sans"} onChange={(event) => updateChunk(selected.id, {textStyle: {...selected.textStyle, fontFamily: event.target.value as NonNullable<LessonChunk["textStyle"]>["fontFamily"]}})}>
+                        {videoFontOptions.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="style-field">
+                      <span><strong>文字色</strong><output>{selectedTextColor.toUpperCase()}</output></span>
+                      <span className="color-field">
+                        <input type="color" value={selectedTextColor} onChange={(event) => updateChunk(selected.id, {textStyle: {...selected.textStyle, color: event.target.value}})} />
+                        <span>{selectedTextColor.toUpperCase()}</span>
+                      </span>
+                    </label>
+                    <label className="style-field style-field--wide">
+                      <span><strong>左右位置</strong><output>{Math.round(selectedTextLayout.xOffsetPercent)}%</output></span>
+                      <div className="range-number-control">
+                        <input type="range" min={Math.min(-300, Math.floor(selectedTextLayout.xOffsetPercent))} max={Math.max(300, Math.ceil(selectedTextLayout.xOffsetPercent))} step="1" list={`main-text-x-${selected.id}`} value={selectedTextLayout.xOffsetPercent} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, xOffsetPercent: Number(event.target.value)}})} />
+                        <input className="numeric-field" type="number" step="1" aria-label="表示テキストの左右位置" value={Math.round(selectedTextLayout.xOffsetPercent)} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, xOffsetPercent: Number(event.target.value) || 0}})} />
+                        <datalist id={`main-text-x-${selected.id}`}><option value="-300" /><option value="-150" /><option value="0" /><option value="150" /><option value="300" /></datalist>
+                      </div>
+                    </label>
+                    <label className="style-field style-field--wide">
+                      <span><strong>上下位置</strong><output>{Math.round(selectedTextLayout.yOffsetPercent)}%</output></span>
+                      <div className="range-number-control">
+                        <input type="range" min={Math.min(-300, Math.floor(selectedTextLayout.yOffsetPercent))} max={Math.max(300, Math.ceil(selectedTextLayout.yOffsetPercent))} step="1" list={`main-text-y-${selected.id}`} value={selectedTextLayout.yOffsetPercent} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, yOffsetPercent: Number(event.target.value)}})} />
+                        <input className="numeric-field" type="number" step="1" aria-label="表示テキストの上下位置" value={Math.round(selectedTextLayout.yOffsetPercent)} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, yOffsetPercent: Number(event.target.value) || 0}})} />
+                        <datalist id={`main-text-y-${selected.id}`}><option value="-300" /><option value="-150" /><option value="0" /><option value="150" /><option value="300" /></datalist>
+                      </div>
+                    </label>
+                  </div>
+                  <p className="field-help">プレビュー上のテキストをクリックして選択し、そのままドラッグでも移動できます。数値入力とドラッグ移動に範囲制限はありません。</p>
                 </div>
 
                 <div className="form-group extra-text-section">
@@ -1069,13 +1188,65 @@ export function VideoStudio() {
                     <p className="inline-empty">補足、式、注釈などをこのシーンだけに追加できます。</p>
                   ) : (
                     <div className="extra-text-list">
-                      {(selected.textBlocks ?? []).map((block, index) => (
-                        <div className="extra-text-row" key={block.id}>
-                          <span>{String(index + 1).padStart(2, "0")}</span>
-                          <textarea className="field" maxLength={300} value={block.text} onChange={(event) => updateTextBlock(block.id, event.target.value)} aria-label={`追加テキスト ${index + 1}`} />
-                          <button type="button" className="square-button danger" aria-label={`追加テキスト ${index + 1}を削除`} onClick={() => removeTextBlock(block.id)}><Trash size={14} /></button>
-                        </div>
-                      ))}
+                      {(selected.textBlocks ?? []).map((block, index) => {
+                        const layout = block.layout ?? defaultTextBlockLayout();
+                        const fontSize = block.style?.fontSize ?? selected.textStyle?.fontSize ?? (selectedAssets.length ? 34 : 44);
+                        const fontFamily = block.style?.fontFamily ?? selected.textStyle?.fontFamily ?? "sans";
+                        const color = block.style?.color ?? selectedTextColor;
+                        const isSelected = selectedTextBlockId === block.id;
+                        return (
+                          <div className={`extra-text-card ${isSelected ? "is-selected" : ""}`} key={block.id}>
+                            <div className="extra-text-card__heading">
+                              <span>TEXT {String(index + 1).padStart(2, "0")}</span>
+                              <span className="extra-text-card__actions">
+                                <button type="button" className="asset-select-button" onClick={() => { setSelectedTextBlockId(block.id); setSelectedAssetIndex(-1); playerRef.current?.pause(); }}><ArrowsOutCardinal size={13} />{isSelected ? "選択中" : "選択"}</button>
+                                <button type="button" className="square-button danger" aria-label={`追加テキスト ${index + 1}を削除`} onClick={() => removeTextBlock(block.id)}><Trash size={14} /></button>
+                              </span>
+                            </div>
+                            <textarea className="field" maxLength={300} value={block.text} onChange={(event) => updateTextBlock(block.id, {text: event.target.value})} aria-label={`追加テキスト ${index + 1}`} />
+                            <div className="extra-text-card__controls">
+                              <label className="style-field style-field--wide">
+                                <span><strong>文字サイズ</strong><output>{fontSize}px</output></span>
+                                <div className="range-number-control">
+                                  <input type="range" min="24" max="120" step="1" list={`extra-text-size-${block.id}`} value={fontSize} onChange={(event) => updateTextBlock(block.id, {style: {...block.style, fontSize: Number(event.target.value)}})} />
+                                  <input className="numeric-field" type="number" min="24" max="120" step="1" aria-label={`追加テキスト ${index + 1}の文字サイズ`} value={fontSize} onChange={(event) => updateTextBlock(block.id, {style: {...block.style, fontSize: Math.min(120, Math.max(24, Number(event.target.value) || 24))}})} />
+                                  <datalist id={`extra-text-size-${block.id}`}><option value="24" /><option value="48" /><option value="72" /><option value="96" /><option value="120" /></datalist>
+                                </div>
+                              </label>
+                              <label className="style-field">
+                                <span><strong>フォント</strong></span>
+                                <select className="field" value={fontFamily} onChange={(event) => updateTextBlock(block.id, {style: {...block.style, fontFamily: event.target.value as NonNullable<LessonChunk["textStyle"]>["fontFamily"]}})}>
+                                  {videoFontOptions.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
+                                </select>
+                              </label>
+                              <label className="style-field">
+                                <span><strong>文字色</strong><output>{color.toUpperCase()}</output></span>
+                                <span className="color-field"><input type="color" value={color} onChange={(event) => updateTextBlock(block.id, {style: {...block.style, color: event.target.value}})} /><span>{color.toUpperCase()}</span></span>
+                              </label>
+                              <label className="style-field style-field--wide">
+                                <span><strong>左右位置</strong><output>{Math.round(layout.xOffsetPercent)}%</output></span>
+                                <div className="range-number-control">
+                                  <input type="range" min={Math.min(-300, Math.floor(layout.xOffsetPercent))} max={Math.max(300, Math.ceil(layout.xOffsetPercent))} step="1" list={`extra-text-x-${block.id}`} value={layout.xOffsetPercent} onChange={(event) => updateTextBlock(block.id, {layout: {...layout, xOffsetPercent: Number(event.target.value)}})} />
+                                  <input className="numeric-field" type="number" step="1" aria-label={`追加テキスト ${index + 1}の左右位置`} value={Math.round(layout.xOffsetPercent)} onChange={(event) => updateTextBlock(block.id, {layout: {...layout, xOffsetPercent: Number(event.target.value) || 0}})} />
+                                  <datalist id={`extra-text-x-${block.id}`}><option value="-300" /><option value="-150" /><option value="0" /><option value="150" /><option value="300" /></datalist>
+                                </div>
+                              </label>
+                              <label className="style-field style-field--wide">
+                                <span><strong>上下位置</strong><output>{Math.round(layout.yOffsetPercent)}%</output></span>
+                                <div className="range-number-control">
+                                  <input type="range" min={Math.min(-300, Math.floor(layout.yOffsetPercent))} max={Math.max(300, Math.ceil(layout.yOffsetPercent))} step="1" list={`extra-text-y-${block.id}`} value={layout.yOffsetPercent} onChange={(event) => updateTextBlock(block.id, {layout: {...layout, yOffsetPercent: Number(event.target.value)}})} />
+                                  <input className="numeric-field" type="number" step="1" aria-label={`追加テキスト ${index + 1}の上下位置`} value={Math.round(layout.yOffsetPercent)} onChange={(event) => updateTextBlock(block.id, {layout: {...layout, yOffsetPercent: Number(event.target.value) || 0}})} />
+                                  <datalist id={`extra-text-y-${block.id}`}><option value="-300" /><option value="-150" /><option value="0" /><option value="150" /><option value="300" /></datalist>
+                                </div>
+                              </label>
+                            </div>
+                            <div className="extra-text-card__footer">
+                              <span>プレビュー上でクリックして選択し、制限なくドラッグ移動できます。</span>
+                              <button type="button" className="layout-reset-button" onClick={() => updateTextBlock(block.id, {style: undefined, layout: undefined})}>初期値に戻す</button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1122,12 +1293,48 @@ export function VideoStudio() {
                   <div className="field-heading"><h3>画像</h3><span>{selectedAssets.length}/12</span></div>
                   {selectedAssets.length > 0 && (
                     <div className="asset-grid">
-                      {selectedAssets.map((asset, index) => (
-                        <div className="asset-card" key={`${asset.previewUrl}-${index}`}>
-                          <Image src={asset.previewUrl} alt={`教材素材 ${index + 1}`} width={640} height={360} unoptimized />
-                          <div><span>{String(index + 1).padStart(2, "0")} · {asset.name}</span><button type="button" onClick={() => removeSceneAsset(index)}>削除</button></div>
-                        </div>
-                      ))}
+                      {selectedAssets.map((asset, index) => {
+                        const layout = asset.layout ?? defaultImageLayout(index, selectedAssets.length);
+                        return (
+                          <div className={`asset-card asset-card--editable ${selectedAssetIndex === index ? "is-selected" : ""}`} key={`${asset.previewUrl}-${index}`}>
+                            <Image src={asset.previewUrl} alt={`教材素材 ${index + 1}`} width={640} height={360} unoptimized />
+                            <div className="asset-card__meta">
+                              <span>{String(index + 1).padStart(2, "0")} · {asset.name}</span>
+                              <span className="asset-card__actions">
+                                <button type="button" className="asset-select-button" onClick={() => { setSelectedAssetIndex(index); setSelectedTextBlockId(""); playerRef.current?.pause(); }}><ArrowsOutCardinal size={13} />{selectedAssetIndex === index ? "選択中" : "選択"}</button>
+                                <button type="button" onClick={() => removeSceneAsset(index)}>削除</button>
+                              </span>
+                            </div>
+                            <div className="asset-layout-controls">
+                              <label>
+                                <span><strong>大きさ</strong><output>{Math.round(layout.widthPercent)}%</output></span>
+                                <div className="range-number-control">
+                                  <input type="range" min="10" max="100" step="1" list={`image-size-ticks-${selected.id}-${index}`} value={layout.widthPercent} onChange={(event) => updateSceneAsset(index, {layout: {...layout, widthPercent: Number(event.target.value)}})} />
+                                  <input className="numeric-field" type="number" min="10" max="100" step="1" aria-label={`${asset.name}の大きさの数値`} value={Math.round(layout.widthPercent)} onChange={(event) => updateSceneAsset(index, {layout: {...layout, widthPercent: Math.min(100, Math.max(10, Number(event.target.value) || 10))}})} />
+                                  <datalist id={`image-size-ticks-${selected.id}-${index}`}><option value="10" /><option value="25" /><option value="50" /><option value="75" /><option value="100" /></datalist>
+                                </div>
+                              </label>
+                              <label>
+                                <span><strong>左右</strong><output>{Math.round(layout.xPercent)}%</output></span>
+                                <div className="range-number-control">
+                                  <input type="range" min="0" max="100" step="1" list={`image-x-ticks-${selected.id}-${index}`} value={layout.xPercent} onChange={(event) => updateSceneAsset(index, {layout: {...layout, xPercent: Number(event.target.value)}})} />
+                                  <input className="numeric-field" type="number" min="0" max="100" step="1" aria-label={`${asset.name}の左右位置の数値`} value={Math.round(layout.xPercent)} onChange={(event) => updateSceneAsset(index, {layout: {...layout, xPercent: Math.min(100, Math.max(0, Number(event.target.value) || 0))}})} />
+                                  <datalist id={`image-x-ticks-${selected.id}-${index}`}><option value="0" /><option value="25" /><option value="50" /><option value="75" /><option value="100" /></datalist>
+                                </div>
+                              </label>
+                              <label>
+                                <span><strong>上下</strong><output>{Math.round(layout.yPercent)}%</output></span>
+                                <div className="range-number-control">
+                                  <input type="range" min="0" max="100" step="1" list={`image-y-ticks-${selected.id}-${index}`} value={layout.yPercent} onChange={(event) => updateSceneAsset(index, {layout: {...layout, yPercent: Number(event.target.value)}})} />
+                                  <input className="numeric-field" type="number" min="0" max="100" step="1" aria-label={`${asset.name}の上下位置の数値`} value={Math.round(layout.yPercent)} onChange={(event) => updateSceneAsset(index, {layout: {...layout, yPercent: Math.min(100, Math.max(0, Number(event.target.value) || 0))}})} />
+                                  <datalist id={`image-y-ticks-${selected.id}-${index}`}><option value="0" /><option value="25" /><option value="50" /><option value="75" /><option value="100" /></datalist>
+                                </div>
+                              </label>
+                              <button type="button" className="layout-reset-button" onClick={() => updateSceneAsset(index, {layout: defaultImageLayout(index, selectedAssets.length)})}>自動配置に戻す</button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   {selectedAssets.length < 12 && (

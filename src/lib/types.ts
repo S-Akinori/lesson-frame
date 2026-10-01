@@ -1,14 +1,36 @@
 export type ChunkStatus = "draft" | "generating" | "ready" | "error";
 
+export type LessonImageLayout = {
+  widthPercent: number;
+  xPercent: number;
+  yPercent: number;
+};
+
 export type LessonImage = {
   name: string;
   previewUrl: string;
   storageKey?: string;
+  layout?: LessonImageLayout;
+};
+
+export type LessonTextLayout = {
+  xOffsetPercent: number;
+  yOffsetPercent: number;
 };
 
 export type LessonTextBlock = {
   id: string;
   text: string;
+  style?: LessonTextStyle;
+  layout?: LessonTextLayout;
+};
+
+export type LessonFontFamily = "sans" | "rounded" | "serif" | "mono";
+
+export type LessonTextStyle = {
+  fontSize?: number;
+  fontFamily?: LessonFontFamily;
+  color?: string;
 };
 
 export type LessonBackgroundMusic = {
@@ -43,6 +65,8 @@ export type LessonChunk = {
   id: string;
   order: number;
   displayText: string;
+  textStyle?: LessonTextStyle;
+  textLayout?: LessonTextLayout;
   speechText: string;
   voice?: string;
   voiceStyle?: string;

@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {estimateDuration, parseScript, toSpeechText, totalDuration} from "./script";
+import {chunkDurationInFrames, chunkStartFrame, estimateDuration, parseScript, toSpeechText, totalDuration, totalDurationInFrames} from "./script";
 
 describe("script pipeline", () => {
   it("treats each non-empty line as one chunk", () => {
@@ -24,5 +24,14 @@ describe("script pipeline", () => {
   it("adds the configured gap to each chunk", () => {
     const chunks = parseScript("一行\n二行").map((chunk) => ({...chunk, durationInSeconds: 3}));
     expect(totalDuration(chunks, 0.15)).toBeCloseTo(6.3);
+  });
+
+  it("seeks to the exact first frame of the selected chunk", () => {
+    const chunks = parseScript("一行\n二行\n三行").map((chunk) => ({...chunk, durationInSeconds: 3}));
+    expect(chunkDurationInFrames(chunks[0], 0.15, 30)).toBe(95);
+    expect(chunkStartFrame(chunks, 0, 0.15, 30)).toBe(0);
+    expect(chunkStartFrame(chunks, 1, 0.15, 30)).toBe(95);
+    expect(chunkStartFrame(chunks, 2, 0.15, 30)).toBe(190);
+    expect(totalDurationInFrames(chunks, 0.15, 30)).toBe(285);
   });
 });
