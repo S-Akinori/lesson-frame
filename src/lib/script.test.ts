@@ -21,6 +21,18 @@ describe("script pipeline", () => {
     expect(estimateDuration("長".repeat(500))).toBeLessThanOrEqual(18);
   });
 
+  it("preserves element animation settings when reparsing the same script", () => {
+    const previous = parseScript("同じテキスト");
+    previous[0].textAnimation = {type: "fade", durationInSeconds: 0.7, delayInSeconds: 0.3};
+    previous[0].textBlocks = [{id: "note", text: "補足", animation: {type: "slide-up", durationInSeconds: 0.5, delayInSeconds: 0.2}}];
+    previous[0].assets = [{name: "figure.png", previewUrl: "figure.png", animation: {type: "zoom-in", durationInSeconds: 0.9, delayInSeconds: 0.1}}];
+
+    const [result] = parseScript("同じテキスト", previous);
+    expect(result.textAnimation).toEqual(previous[0].textAnimation);
+    expect(result.textBlocks).toEqual(previous[0].textBlocks);
+    expect(result.assets).toEqual(previous[0].assets);
+  });
+
   it("adds the configured gap to each chunk", () => {
     const chunks = parseScript("一行\n二行").map((chunk) => ({...chunk, durationInSeconds: 3}));
     expect(totalDuration(chunks, 0.15)).toBeCloseTo(6.3);

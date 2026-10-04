@@ -1,8 +1,9 @@
 import "katex/dist/katex.min.css";
 import {useEffect, useRef} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {AbsoluteFill, Audio, Img, Sequence} from "remotion";
-import {defaultTextBlockLayout, getVideoFontFamily, resolveImageLayout} from "../../lib/scene-layout";
+import {AbsoluteFill, Audio, Img, Sequence, useCurrentFrame, useVideoConfig} from "remotion";
+import {elementAnimationStyle} from "../../lib/element-animation";
+import {defaultMainTextLayout, defaultTextBlockLayout, getVideoFontFamily, resolveImageLayout} from "../../lib/scene-layout";
 import {chunkDurationInFrames} from "../../lib/script";
 import type {LessonChunk, LessonImageLayout, LessonProject, LessonTextBlock, LessonTextLayout, LessonTextStyle} from "../../lib/types";
 import {LatexText} from "./latex-text";
@@ -67,6 +68,8 @@ function Scene({
   onTextBlockSelect,
   onTextBlockStyleChange,
 }: SceneProps) {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
   const imageStageRef = useRef<HTMLDivElement>(null);
   const textStageRef = useRef<HTMLDivElement>(null);
   const interactionRef = useRef<{
@@ -94,7 +97,8 @@ function Scene({
   const selectedTextColor = chunk.textStyle?.color ?? textColor;
   const selectedFontFamily = getVideoFontFamily(chunk.textStyle?.fontFamily);
   const mainFontSize = chunk.textStyle?.fontSize ?? displayFontSize(chunk.displayText, hasAssets, textCount);
-  const mainTextLayout = chunk.textLayout ?? defaultTextBlockLayout();
+  const mainTextLayout = chunk.textLayout ?? defaultMainTextLayout(hasAssets, textBlocks.length);
+  const mainTextAnimation = elementAnimationStyle(chunk.textAnimation, frame, fps);
   const isMainTextSelected = isEditable && editableTextBlockId === MAIN_TEXT_ELEMENT_ID;
 
   const startAssetInteraction = (
@@ -130,7 +134,7 @@ function Scene({
       mode,
       pointerX: event.clientX,
       pointerY: event.clientY,
-      layout: block.layout ?? defaultTextBlockLayout(),
+      layout: block.layout ?? defaultTextBlockLayout(textBlocks.findIndex((item) => item.id === block.id), textBlocks.length, hasAssets),
       style: {...chunk.textStyle, ...block.style, fontSize: block.style?.fontSize ?? chunk.textStyle?.fontSize ?? defaultFontSize},
     };
     onTextBlockSelect?.(block.id);
@@ -149,7 +153,7 @@ function Scene({
       mode,
       pointerX: event.clientX,
       pointerY: event.clientY,
-      layout: chunk.textLayout ?? defaultTextBlockLayout(),
+      layout: chunk.textLayout ?? defaultMainTextLayout(hasAssets, textBlocks.length),
       style: {...chunk.textStyle, fontSize: chunk.textStyle?.fontSize ?? defaultFontSize},
     };
     onTextBlockSelect?.(MAIN_TEXT_ELEMENT_ID);
@@ -251,15 +255,10 @@ function Scene({
       )}
       <div style={{
         position: "absolute",
-        inset: hasAssets ? "105px 82px 70px" : "100px 120px 100px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: hasAssets ? "flex-start" : "center",
-        flexDirection: "column",
-        gap: hasAssets ? 24 : 18,
+        inset: "70px 82px",
       }}>
         {textCount > 0 && (
-          <div ref={textStageRef} style={{position: "relative", width: hasAssets ? "90%" : "84%", display: "flex", flexDirection: "column", alignItems: "center", gap: hasAssets ? 10 : 16, flexShrink: 0, overflow: "visible", touchAction: isEditable ? "none" : "auto"}}>
+          <div ref={textStageRef} style={{position: "absolute", inset: 0, zIndex: 2, overflow: "visible", pointerEvents: "none", touchAction: isEditable ? "none" : "auto"}}>
             {project.theme.showMainText && chunk.displayText.trim() && (
                 <div
                   role={isEditable ? "group" : undefined}
@@ -272,12 +271,15 @@ function Scene({
                     onTextBlockSelect?.(MAIN_TEXT_ELEMENT_ID);
                   }}
                   style={{
-                    position: "relative",
-                    left: `${mainTextLayout.xOffsetPercent}%`,
-                    top: `${mainTextLayout.yOffsetPercent}%`,
-                    maxWidth: "100%",
+                    position: "absolute",
+                    left: `calc(50% + ${mainTextLayout.xOffsetPercent}%)`,
+                    top: `calc(50% + ${mainTextLayout.yOffsetPercent}%)`,
+                    width: "86%",
+                    opacity: mainTextAnimation.opacity,
+                    transform: `translate(-50%, -50%) ${mainTextAnimation.transform}`,
                     outline: isMainTextSelected ? `4px solid ${project.theme.accent}` : "4px solid transparent",
                     outlineOffset: 8,
+                    pointerEvents: "auto",
                     cursor: isEditable ? "grab" : "default",
                     willChange: isEditable ? "left, top" : undefined,
                   }}
@@ -319,10 +321,11 @@ function Scene({
                   ) : null}
                 </div>
             )}
-            {textBlocks.map((block) => {
+            {textBlocks.map((block, blockIndex) => {
               const fallbackFontSize = Math.round((chunk.textStyle?.fontSize ?? (hasAssets ? 46 : 58)) * 0.74);
               const blockStyle = {...chunk.textStyle, ...block.style};
-              const blockLayout = block.layout ?? defaultTextBlockLayout();
+              const blockLayout = block.layout ?? defaultTextBlockLayout(blockIndex, textBlocks.length, hasAssets);
+              const blockAnimation = elementAnimationStyle(block.animation, frame, fps);
               const isSelected = isEditable && editableTextBlockId === block.id;
               return (
                 <div
@@ -337,12 +340,15 @@ function Scene({
                     onTextBlockSelect?.(block.id);
                   }}
                   style={{
-                    position: "relative",
-                    left: `${blockLayout.xOffsetPercent}%`,
-                    top: `${blockLayout.yOffsetPercent}%`,
-                    maxWidth: "100%",
+                    position: "absolute",
+                    left: `calc(50% + ${blockLayout.xOffsetPercent}%)`,
+                    top: `calc(50% + ${blockLayout.yOffsetPercent}%)`,
+                    width: "82%",
+                    opacity: blockAnimation.opacity,
+                    transform: `translate(-50%, -50%) ${blockAnimation.transform}`,
                     outline: isSelected ? `4px solid ${project.theme.accent}` : "4px solid transparent",
                     outlineOffset: 8,
+                    pointerEvents: "auto",
                     cursor: isEditable ? "grab" : "default",
                     willChange: isEditable ? "left, top" : undefined,
                   }}
@@ -393,7 +399,7 @@ function Scene({
         {hasAssets && (
           <div
             ref={imageStageRef}
-            style={{position: "relative", flex: "1 1 0", minHeight: 0, width: "90%", overflow: "visible", touchAction: isEditable ? "none" : "auto"}}
+            style={{position: "absolute", inset: 0, zIndex: 1, overflow: "visible", pointerEvents: "none", touchAction: isEditable ? "none" : "auto"}}
             onClick={(event) => {
               if (!isEditable) return;
               event.preventDefault();
@@ -401,7 +407,8 @@ function Scene({
             }}
           >
             {assets.map((asset, index) => {
-              const layout = resolveImageLayout(asset, index, assets.length);
+              const layout = resolveImageLayout(asset, index, assets.length, textCount > 0);
+              const assetAnimation = elementAnimationStyle(asset.animation, frame, fps);
               const isSelected = isEditable && editableAssetIndex === index;
               return (
                 <div
@@ -421,9 +428,11 @@ function Scene({
                     top: `${layout.yPercent}%`,
                     width: `${layout.widthPercent}%`,
                     maxHeight: "100%",
-                    transform: "translate(-50%, -50%)",
+                    opacity: assetAnimation.opacity,
+                    transform: `translate(-50%, -50%) ${assetAnimation.transform}`,
                     outline: isSelected ? `4px solid ${project.theme.accent}` : "4px solid transparent",
                     outlineOffset: 6,
+                    pointerEvents: "auto",
                     cursor: isEditable ? "grab" : "default",
                     willChange: isEditable ? "transform" : undefined,
                   }}

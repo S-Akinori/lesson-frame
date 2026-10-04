@@ -6,11 +6,21 @@ export type LessonImageLayout = {
   yPercent: number;
 };
 
+export type LessonElementAnimationType = "none" | "fade" | "slide-up" | "zoom-in";
+
+export type LessonElementAnimation = {
+  type: LessonElementAnimationType;
+  durationInSeconds: number;
+  delayInSeconds: number;
+};
+
 export type LessonImage = {
   name: string;
   previewUrl: string;
   storageKey?: string;
   layout?: LessonImageLayout;
+  layoutMode?: "auto" | "manual";
+  animation?: LessonElementAnimation;
 };
 
 export type LessonTextLayout = {
@@ -23,6 +33,8 @@ export type LessonTextBlock = {
   text: string;
   style?: LessonTextStyle;
   layout?: LessonTextLayout;
+  layoutMode?: "auto" | "manual";
+  animation?: LessonElementAnimation;
 };
 
 export type LessonFontFamily = "sans" | "rounded" | "serif" | "mono";
@@ -67,6 +79,8 @@ export type LessonChunk = {
   displayText: string;
   textStyle?: LessonTextStyle;
   textLayout?: LessonTextLayout;
+  textLayoutMode?: "auto" | "manual";
+  textAnimation?: LessonElementAnimation;
   speechText: string;
   voice?: string;
   voiceStyle?: string;

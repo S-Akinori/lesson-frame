@@ -6,11 +6,19 @@ const imageLayoutSchema = z.object({
   yPercent: z.number().min(0).max(100),
 });
 
+const elementAnimationSchema = z.object({
+  type: z.enum(["none", "fade", "slide-up", "zoom-in"]),
+  durationInSeconds: z.number().min(0.1).max(5),
+  delayInSeconds: z.number().min(0).max(30),
+});
+
 const assetSchema = z.object({
   name: z.string().max(180),
   previewUrl: z.string(),
   storageKey: z.string().optional(),
   layout: imageLayoutSchema.optional(),
+  layoutMode: z.enum(["auto", "manual"]).optional(),
+  animation: elementAnimationSchema.optional(),
 });
 
 const audioSchema = z.object({
@@ -40,6 +48,8 @@ const textBlockSchema = z.object({
   text: z.string().max(300),
   style: textStyleSchema.optional(),
   layout: textLayoutSchema.optional(),
+  layoutMode: z.enum(["auto", "manual"]).optional(),
+  animation: elementAnimationSchema.optional(),
 });
 
 export const projectSchema = z.object({
@@ -64,6 +74,8 @@ export const projectSchema = z.object({
     displayText: z.string().max(300),
     textStyle: textStyleSchema.optional(),
     textLayout: textLayoutSchema.optional(),
+    textLayoutMode: z.enum(["auto", "manual"]).optional(),
+    textAnimation: elementAnimationSchema.optional(),
     speechText: z.string().max(500),
     voice: z.string().min(1).max(80).optional(),
     voiceStyle: z.string().max(300).optional(),

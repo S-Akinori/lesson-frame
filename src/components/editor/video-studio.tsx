@@ -10,6 +10,7 @@ import {
 import {useEffect, useRef, useState} from "react";
 import type {ChangeEvent} from "react";
 import {LessonComposition, MAIN_TEXT_ELEMENT_ID} from "@/components/video/lesson-composition";
+import {elementAnimationOptions, resolveElementAnimation} from "@/lib/element-animation";
 import {
   parseProjectFile,
   projectFileErrorMessage,
@@ -17,9 +18,9 @@ import {
   serializeProjectFile,
 } from "@/lib/project-file";
 import {projectSchema} from "@/lib/project-schema";
-import {defaultImageLayout, defaultTextBlockLayout, videoFontOptions} from "@/lib/scene-layout";
+import {addImagesWithAutoLayout, addTextBlockWithAutoLayout, defaultImageLayout, defaultMainTextLayout, defaultTextBlockLayout, videoFontOptions} from "@/lib/scene-layout";
 import {chunkIndexAtFrame, chunkStartFrame, estimateDuration, formatDuration, insertChunkAfter, parseScript, toSpeechText, totalDuration, totalDurationInFrames} from "@/lib/script";
-import type {LessonChunk, LessonImage, LessonProject, LessonTextBlock, ProjectTemplate, ReusableAsset} from "@/lib/types";
+import type {LessonChunk, LessonElementAnimation, LessonImage, LessonProject, LessonTextBlock, ProjectTemplate, ReusableAsset} from "@/lib/types";
 import {GEMINI_VOICES, VOICE_STYLE_EXAMPLES} from "@/lib/voices";
 
 const sampleScript = `今日は気体の状態方程式について説明します。
@@ -91,6 +92,57 @@ const backgroundMusicValidationError = (file: File) => {
   return null;
 };
 
+function ElementAnimationControls({
+  value,
+  onChange,
+  idPrefix,
+}: {
+  value?: LessonElementAnimation;
+  onChange: (animation: LessonElementAnimation) => void;
+  idPrefix: string;
+}) {
+  const animation = resolveElementAnimation(value);
+  const updateNumber = (key: "durationInSeconds" | "delayInSeconds", rawValue: string) => {
+    const maximum = key === "durationInSeconds" ? 5 : 30;
+    const minimum = key === "durationInSeconds" ? 0.1 : 0;
+    onChange({...animation, [key]: Math.min(maximum, Math.max(minimum, Number(rawValue) || minimum))});
+  };
+
+  return (
+    <div className="element-animation-controls">
+      <label className="style-field style-field--wide" htmlFor={`${idPrefix}-animation-type`}>
+        <span><strong>登場アニメーション</strong></span>
+        <select
+          id={`${idPrefix}-animation-type`}
+          className="field"
+          value={animation.type}
+          onChange={(event) => onChange({...animation, type: event.target.value as LessonElementAnimation["type"]})}
+        >
+          {elementAnimationOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+      {animation.type !== "none" ? (
+        <div className="element-animation-timing">
+          <label className="style-field">
+            <span><strong>長さ</strong><output>{animation.durationInSeconds.toFixed(1)}秒</output></span>
+            <div className="range-number-control">
+              <input type="range" min="0.1" max="5" step="0.1" value={animation.durationInSeconds} onChange={(event) => updateNumber("durationInSeconds", event.target.value)} />
+              <input className="numeric-field" type="number" min="0.1" max="5" step="0.1" aria-label="アニメーションの長さ" value={animation.durationInSeconds} onChange={(event) => updateNumber("durationInSeconds", event.target.value)} />
+            </div>
+          </label>
+          <label className="style-field">
+            <span><strong>開始</strong><output>{animation.delayInSeconds.toFixed(1)}秒後</output></span>
+            <div className="range-number-control">
+              <input type="range" min="0" max="10" step="0.1" value={Math.min(10, animation.delayInSeconds)} onChange={(event) => updateNumber("delayInSeconds", event.target.value)} />
+              <input className="numeric-field" type="number" min="0" max="30" step="0.1" aria-label="アニメーションの開始時間" value={animation.delayInSeconds} onChange={(event) => updateNumber("delayInSeconds", event.target.value)} />
+            </div>
+          </label>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function VideoStudio() {
   const [project, setProject] = useState<LessonProject>(() => initialProject());
   const [script, setScript] = useState("");
@@ -134,7 +186,7 @@ export function VideoStudio() {
   const selectedVoice = GEMINI_VOICES.find((voice) => voice.id === selectedVoiceId);
   const selectedAssets = selected ? [...(selected.asset ? [selected.asset] : []), ...(selected.assets ?? [])] : [];
   const selectedTextColor = selected?.textStyle?.color ?? (project.theme.background === "paper" && !project.theme.backgroundImage ? "#1d272b" : "#ffffff");
-  const selectedTextLayout = selected?.textLayout ?? defaultTextBlockLayout();
+  const selectedTextLayout = selected?.textLayout ?? defaultMainTextLayout(selectedAssets.length > 0, selected?.textBlocks?.length ?? 0);
   const imageLibrary = assetLibrary.filter((asset) => asset.kind === "image");
   const audioLibrary = assetLibrary.filter((asset) => asset.kind === "audio");
   const readyCount = project.chunks.filter((chunk) => chunk.audio).length;
@@ -379,9 +431,14 @@ export function VideoStudio() {
       setNotice({kind: "info", message: "この素材はすでにシーンへ追加されています。"});
       return;
     }
-    updateChunk(selected.id, {
-      assets: [...(selected.assets ?? []), {name: asset.name, previewUrl: asset.url, storageKey: asset.storageKey}],
-    });
+    setProject((current) => ({
+      ...current,
+      chunks: current.chunks.map((chunk) => chunk.id === selected.id
+        ? addImagesWithAutoLayout(chunk, [{name: asset.name, previewUrl: asset.url, storageKey: asset.storageKey}])
+        : chunk),
+    }));
+    setSelectedAssetIndex(selectedAssets.length);
+    setSelectedTextBlockId("");
     setNotice({kind: "success", message: `共有素材「${asset.name}」をシーンへ追加しました。`});
   };
 
@@ -493,14 +550,22 @@ export function VideoStudio() {
       return;
     }
     const id = crypto.randomUUID();
-    updateChunk(selected.id, {textBlocks: [...textBlocks, {id, text: "追加テキスト"}]});
+    setProject((current) => ({
+      ...current,
+      chunks: current.chunks.map((chunk) => chunk.id === selected.id
+        ? addTextBlockWithAutoLayout(chunk, {id, text: "追加テキスト"})
+        : chunk),
+    }));
     setSelectedTextBlockId(id);
     setSelectedAssetIndex(-1);
   };
 
   const updateTextBlock = (id: string, patch: Partial<LessonTextBlock>) => {
     if (!selected) return;
-    updateChunk(selected.id, {textBlocks: (selected.textBlocks ?? []).map((block) => block.id === id ? {...block, ...patch} : block)});
+    const normalizedPatch = "layout" in patch
+      ? {...patch, layoutMode: patch.layout ? (patch.layoutMode ?? "manual") : "auto" as const}
+      : patch;
+    updateChunk(selected.id, {textBlocks: (selected.textBlocks ?? []).map((block) => block.id === id ? {...block, ...normalizedPatch} : block)});
   };
 
   const removeTextBlock = (id: string) => {
@@ -512,13 +577,16 @@ export function VideoStudio() {
 
   const updateSceneAsset = (index: number, patch: Partial<LessonImage>) => {
     if (!selected) return;
+    const normalizedPatch = "layout" in patch
+      ? {...patch, layoutMode: patch.layout ? (patch.layoutMode ?? "manual") : "auto" as const}
+      : patch;
     if (selected.asset && index === 0) {
-      updateChunk(selected.id, {asset: {...selected.asset, ...patch}});
+      updateChunk(selected.id, {asset: {...selected.asset, ...normalizedPatch}});
       return;
     }
     const assetIndex = index - (selected.asset ? 1 : 0);
     updateChunk(selected.id, {
-      assets: (selected.assets ?? []).map((asset, currentIndex) => currentIndex === assetIndex ? {...asset, ...patch} : asset),
+      assets: (selected.assets ?? []).map((asset, currentIndex) => currentIndex === assetIndex ? {...asset, ...normalizedPatch} : asset),
     });
   };
 
@@ -560,7 +628,7 @@ export function VideoStudio() {
       setProject((current) => ({
         ...current,
         chunks: current.chunks.map((chunk) => chunk.id === chunkId
-          ? {...chunk, assets: [...(chunk.assets ?? []), localAsset]}
+          ? addImagesWithAutoLayout(chunk, [localAsset])
           : chunk),
       }));
       try {
@@ -581,7 +649,7 @@ export function VideoStudio() {
         setProject((current) => ({
           ...current,
           chunks: current.chunks.map((chunk) => chunk.id === chunkId
-            ? {...chunk, assets: (chunk.assets ?? []).map((asset) => asset.previewUrl === localUrl ? {name: file.name, previewUrl: result.readUrl, storageKey: result.key} : asset)}
+            ? {...chunk, assets: (chunk.assets ?? []).map((asset) => asset.previewUrl === localUrl ? {...asset, name: file.name, previewUrl: result.readUrl, storageKey: result.key} : asset)}
             : chunk),
         }));
         if (!result.duplicate) {
@@ -1088,7 +1156,7 @@ export function VideoStudio() {
                     setSelectedAssetIndex(index);
                     setSelectedTextBlockId("");
                   },
-                  onMainTextLayoutChange: (layout) => selected && updateChunk(selected.id, {textLayout: layout}),
+                  onMainTextLayoutChange: (layout) => selected && updateChunk(selected.id, {textLayout: layout, textLayoutMode: "manual"}),
                   onMainTextStyleChange: (style) => selected && updateChunk(selected.id, {textStyle: style}),
                   onTextBlockLayoutChange: (id, layout) => updateTextBlock(id, {layout}),
                   onTextBlockStyleChange: (id, style) => updateTextBlock(id, {style}),
@@ -1171,7 +1239,7 @@ export function VideoStudio() {
                 <div className={`text-style-panel ${selectedTextBlockId === MAIN_TEXT_ELEMENT_ID ? "is-selected" : ""}`} aria-label="テキストスタイル">
                   <div className="text-style-panel__heading">
                     <strong>テキストスタイル</strong>
-                    <button type="button" onClick={() => updateChunk(selected.id, {textStyle: undefined, textLayout: undefined})}>初期値に戻す</button>
+                    <button type="button" onClick={() => updateChunk(selected.id, {textStyle: undefined, textLayout: undefined, textLayoutMode: "auto"})}>初期値に戻す</button>
                   </div>
                   <div className="text-style-grid">
                     <label className="style-field style-field--wide">
@@ -1215,20 +1283,25 @@ export function VideoStudio() {
                     <label className="style-field style-field--wide">
                       <span><strong>左右位置</strong><output>{Math.round(selectedTextLayout.xOffsetPercent)}%</output></span>
                       <div className="range-number-control">
-                        <input type="range" min={Math.min(-300, Math.floor(selectedTextLayout.xOffsetPercent))} max={Math.max(300, Math.ceil(selectedTextLayout.xOffsetPercent))} step="1" list={`main-text-x-${selected.id}`} value={selectedTextLayout.xOffsetPercent} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, xOffsetPercent: Number(event.target.value)}})} />
-                        <input className="numeric-field" type="number" step="1" aria-label="表示テキストの左右位置" value={Math.round(selectedTextLayout.xOffsetPercent)} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, xOffsetPercent: Number(event.target.value) || 0}})} />
+                        <input type="range" min={Math.min(-300, Math.floor(selectedTextLayout.xOffsetPercent))} max={Math.max(300, Math.ceil(selectedTextLayout.xOffsetPercent))} step="1" list={`main-text-x-${selected.id}`} value={selectedTextLayout.xOffsetPercent} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, xOffsetPercent: Number(event.target.value)}, textLayoutMode: "manual"})} />
+                        <input className="numeric-field" type="number" step="1" aria-label="表示テキストの左右位置" value={Math.round(selectedTextLayout.xOffsetPercent)} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, xOffsetPercent: Number(event.target.value) || 0}, textLayoutMode: "manual"})} />
                         <datalist id={`main-text-x-${selected.id}`}><option value="-300" /><option value="-150" /><option value="0" /><option value="150" /><option value="300" /></datalist>
                       </div>
                     </label>
                     <label className="style-field style-field--wide">
                       <span><strong>上下位置</strong><output>{Math.round(selectedTextLayout.yOffsetPercent)}%</output></span>
                       <div className="range-number-control">
-                        <input type="range" min={Math.min(-300, Math.floor(selectedTextLayout.yOffsetPercent))} max={Math.max(300, Math.ceil(selectedTextLayout.yOffsetPercent))} step="1" list={`main-text-y-${selected.id}`} value={selectedTextLayout.yOffsetPercent} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, yOffsetPercent: Number(event.target.value)}})} />
-                        <input className="numeric-field" type="number" step="1" aria-label="表示テキストの上下位置" value={Math.round(selectedTextLayout.yOffsetPercent)} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, yOffsetPercent: Number(event.target.value) || 0}})} />
+                        <input type="range" min={Math.min(-300, Math.floor(selectedTextLayout.yOffsetPercent))} max={Math.max(300, Math.ceil(selectedTextLayout.yOffsetPercent))} step="1" list={`main-text-y-${selected.id}`} value={selectedTextLayout.yOffsetPercent} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, yOffsetPercent: Number(event.target.value)}, textLayoutMode: "manual"})} />
+                        <input className="numeric-field" type="number" step="1" aria-label="表示テキストの上下位置" value={Math.round(selectedTextLayout.yOffsetPercent)} onChange={(event) => updateChunk(selected.id, {textLayout: {...selectedTextLayout, yOffsetPercent: Number(event.target.value) || 0}, textLayoutMode: "manual"})} />
                         <datalist id={`main-text-y-${selected.id}`}><option value="-300" /><option value="-150" /><option value="0" /><option value="150" /><option value="300" /></datalist>
                       </div>
                     </label>
                   </div>
+                  <ElementAnimationControls
+                    idPrefix={`main-text-${selected.id}`}
+                    value={selected.textAnimation}
+                    onChange={(textAnimation) => updateChunk(selected.id, {textAnimation})}
+                  />
                   <p className="field-help">プレビュー上のテキストをクリックして選択し、そのままドラッグでも移動できます。数値入力とドラッグ移動に範囲制限はありません。</p>
                 </div>
 
@@ -1242,7 +1315,7 @@ export function VideoStudio() {
                   ) : (
                     <div className="extra-text-list">
                       {(selected.textBlocks ?? []).map((block, index) => {
-                        const layout = block.layout ?? defaultTextBlockLayout();
+                        const layout = block.layout ?? defaultTextBlockLayout(index, selected.textBlocks?.length ?? 1, selectedAssets.length > 0);
                         const fontSize = block.style?.fontSize ?? selected.textStyle?.fontSize ?? (selectedAssets.length ? 34 : 44);
                         const fontFamily = block.style?.fontFamily ?? selected.textStyle?.fontFamily ?? "sans";
                         const color = block.style?.color ?? selectedTextColor;
@@ -1292,6 +1365,11 @@ export function VideoStudio() {
                                   <datalist id={`extra-text-y-${block.id}`}><option value="-300" /><option value="-150" /><option value="0" /><option value="150" /><option value="300" /></datalist>
                                 </div>
                               </label>
+                              <ElementAnimationControls
+                                idPrefix={`extra-text-${block.id}`}
+                                value={block.animation}
+                                onChange={(animation) => updateTextBlock(block.id, {animation})}
+                              />
                             </div>
                             <div className="extra-text-card__footer">
                               <span>プレビュー上でクリックして選択し、制限なくドラッグ移動できます。</span>
@@ -1359,7 +1437,8 @@ export function VideoStudio() {
                   {selectedAssets.length > 0 && (
                     <div className="asset-grid">
                       {selectedAssets.map((asset, index) => {
-                        const layout = asset.layout ?? defaultImageLayout(index, selectedAssets.length);
+                        const hasSceneText = Boolean(selected.displayText.trim() || selected.textBlocks?.some((block) => block.text.trim()));
+                        const layout = asset.layout ?? defaultImageLayout(index, selectedAssets.length, hasSceneText);
                         return (
                           <div className={`asset-card asset-card--editable ${selectedAssetIndex === index ? "is-selected" : ""}`} key={`${asset.previewUrl}-${index}`}>
                             <Image src={asset.previewUrl} alt={`教材素材 ${index + 1}`} width={640} height={360} unoptimized />
@@ -1395,7 +1474,12 @@ export function VideoStudio() {
                                   <datalist id={`image-y-ticks-${selected.id}-${index}`}><option value="0" /><option value="25" /><option value="50" /><option value="75" /><option value="100" /></datalist>
                                 </div>
                               </label>
-                              <button type="button" className="layout-reset-button" onClick={() => updateSceneAsset(index, {layout: defaultImageLayout(index, selectedAssets.length)})}>自動配置に戻す</button>
+                              <ElementAnimationControls
+                                idPrefix={`image-${selected.id}-${index}`}
+                                value={asset.animation}
+                                onChange={(animation) => updateSceneAsset(index, {animation})}
+                              />
+                              <button type="button" className="layout-reset-button" onClick={() => updateSceneAsset(index, {layout: defaultImageLayout(index, selectedAssets.length, hasSceneText), layoutMode: "auto"})}>自動配置に戻す</button>
                             </div>
                           </div>
                         );

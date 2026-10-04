@@ -1046,6 +1046,26 @@ summary:focus-visible {
 .asset-layout-controls input { width: 100%; accent-color: var(--accent); }
 .asset-layout-controls .layout-reset-button { justify-self: start; color: var(--accent-deep); }
 
+.element-animation-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 9px;
+  width: 100%;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.text-style-panel > .element-animation-controls { margin-top: 12px; }
+.element-animation-controls .style-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 6px;
+}
+.element-animation-controls .style-field > span { display: flex; justify-content: space-between; gap: 8px; }
+.element-animation-timing { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.element-animation-controls select.field { min-height: 36px; }
+
 .upload-dropzone {
   display: flex;
   min-height: 142px;
