@@ -25,7 +25,7 @@ const renderPart = (value: string, key: string, displayMode: boolean): ReactNode
 export function LatexText({text, className, style}: Props) {
   const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g).filter(Boolean);
   return (
-    <span className={className} style={style}>
+    <span className={className} style={{whiteSpace: "pre-wrap", ...style}}>
       {parts.map((part, index) => {
         if (part.startsWith("$$") && part.endsWith("$$")) {
           return renderPart(part.slice(2, -2), `block-${index}`, true);

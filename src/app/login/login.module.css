@@ -1,0 +1,62 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(380px, .85fr);
+  background: #f2efe8;
+  color: #1f292c;
+}
+
+.intro {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(32px, 5vw, 76px);
+  border-right: 1px solid #d6d1c7;
+  background-color: #17221f;
+  background-image: linear-gradient(rgba(228, 234, 229, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(228, 234, 229, .055) 1px, transparent 1px);
+  background-size: 54px 54px;
+  color: #f4f1e9;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; font-size: 13px; letter-spacing: -.01em; }
+.brand span { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid rgba(255,255,255,.3); font-family: var(--font-geist-mono); font-size: 10px; letter-spacing: .08em; }
+.brand strong { font-weight: 560; }
+.copy { max-width: 680px; }
+.eyebrow { margin: 0 0 22px; color: #cf765d; font-family: var(--font-geist-mono); font-size: 10px; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; }
+.copy h1 { margin: 0; max-width: 10ch; font-size: clamp(48px, 6vw, 90px); font-weight: 520; letter-spacing: -.065em; line-height: .98; }
+.copy > p:last-child { max-width: 46ch; margin: 32px 0 0; color: #aebbb5; font-size: 14px; line-height: 1.8; }
+.note { margin: 0; color: #85938c; font-family: var(--font-geist-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+
+.formPanel { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: clamp(32px, 7vw, 96px); }
+.formHeader { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 18px; align-items: start; padding-bottom: 28px; border-bottom: 1px solid #d6d1c7; }
+.index { padding-top: 5px; color: #a29d93; font-family: var(--font-geist-mono); font-size: 9px; }
+.formHeader p { margin: 0 0 6px; color: #a29d93; font-family: var(--font-geist-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.formHeader h2 { margin: 0; font-size: clamp(22px, 3vw, 34px); font-weight: 560; letter-spacing: -.045em; }
+.form { display: grid; gap: 10px; margin-top: 34px; }
+.form label { font-size: 11px; font-weight: 650; }
+.form input[type="password"] { width: 100%; border: 1px solid #c8c2b8; border-radius: 4px; background: #faf8f3; padding: 15px 16px; color: #1f292c; font-family: var(--font-geist-mono); font-size: 14px; outline: none; transition: border-color 180ms ease, box-shadow 180ms ease; }
+.form input[type="password"]:focus { border-color: #bd644c; box-shadow: 0 0 0 3px rgba(189,100,76,.1); }
+.form input[type="password"]:disabled { cursor: not-allowed; opacity: .55; }
+.help { margin: 0 0 12px; color: #77736b; font-size: 10px; line-height: 1.6; }
+.help code { color: #4b5557; font-family: var(--font-geist-mono); }
+.error { margin: 0 0 6px; border-left: 2px solid #bd644c; background: rgba(189,100,76,.07); padding: 10px 12px; color: #863f2e; font-size: 11px; line-height: 1.55; }
+.form button { display: flex; min-height: 49px; align-items: center; justify-content: space-between; border: 1px solid #17221f; border-radius: 4px; background: #17221f; padding: 0 16px; color: #f4f1e9; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; transition: transform 160ms ease, background-color 160ms ease; }
+.form button:hover { background: #25342f; }
+.form button:active { transform: translateY(1px); }
+.form button:disabled { cursor: not-allowed; opacity: .45; }
+.security { margin: 24px 0 0; color: #8b877f; font-size: 9px; line-height: 1.65; }
+
+@media (max-width: 800px) {
+  .page { grid-template-columns: 1fr; }
+  .intro { min-height: 42dvh; padding: 28px 24px 34px; }
+  .copy { margin-top: 70px; }
+  .copy h1 { font-size: clamp(42px, 13vw, 64px); }
+  .copy > p:last-child { margin-top: 22px; }
+  .note { display: none; }
+  .formPanel { min-height: 58dvh; padding: 38px 24px 52px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .form input[type="password"], .form button { transition: none; }
+}

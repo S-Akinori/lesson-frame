@@ -34,6 +34,16 @@ npm run dev
 
 Windowsでは`.env.template`を`.env.local`へコピーして値を設定してください。
 
+### サイトパスワード
+
+```dotenv
+SITE_PASSWORD=十分に長い推測されにくいパスワード
+```
+
+`SITE_PASSWORD`は必須です。未設定時は安全側に倒し、ログイン画面から先へ進めません。ログイン後はHttpOnlyの認証Cookieが30日間有効です。パスワードを変更して再デプロイすると、発行済みの認証Cookieも無効になります。
+
+Vercelではプロジェクトの「Settings」→「Environment Variables」に`SITE_PASSWORD`を追加し、Production・Preview・Developmentの必要な環境を選択してから再デプロイしてください。値はリポジトリへコミットしないでください。
+
 ### Gemini TTS
 
 ```dotenv

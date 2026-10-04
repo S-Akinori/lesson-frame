@@ -3,7 +3,7 @@
 import {Player} from "@remotion/player";
 import Image from "next/image";
 import {
-  ArrowDown, ArrowsOutCardinal, ArrowUp, CheckCircle, DownloadSimple, FileImage, FilmSlate,
+  ArrowDown, ArrowsOutCardinal, ArrowUp, CaretDown, CheckCircle, DownloadSimple, FileImage, FilmSlate,
   GearSix, LinkSimple, MagicWand, MusicNotes, Play, Plus, SpeakerHigh,
   SpinnerGap, Trash, UploadSimple, WarningCircle, Waveform,
 } from "@phosphor-icons/react";
@@ -18,7 +18,7 @@ import {
 } from "@/lib/project-file";
 import {projectSchema} from "@/lib/project-schema";
 import {defaultImageLayout, defaultTextBlockLayout, videoFontOptions} from "@/lib/scene-layout";
-import {chunkStartFrame, estimateDuration, formatDuration, parseScript, toSpeechText, totalDuration, totalDurationInFrames} from "@/lib/script";
+import {chunkIndexAtFrame, chunkStartFrame, estimateDuration, formatDuration, insertChunkAfter, parseScript, toSpeechText, totalDuration, totalDurationInFrames} from "@/lib/script";
 import type {LessonChunk, LessonImage, LessonProject, LessonTextBlock, ProjectTemplate, ReusableAsset} from "@/lib/types";
 import {GEMINI_VOICES, VOICE_STYLE_EXAMPLES} from "@/lib/voices";
 
@@ -110,12 +110,15 @@ export function VideoStudio() {
   const [inspectorTab, setInspectorTab] = useState<"script" | "image">("script");
   const [selectedAssetIndex, setSelectedAssetIndex] = useState(0);
   const [selectedTextBlockId, setSelectedTextBlockId] = useState("");
+  const [collapsedSettings, setCollapsedSettings] = useState({text: false, image: false});
   const [generateOnSetup, setGenerateOnSetup] = useState(true);
   const [isPreparing, setIsPreparing] = useState(false);
   const [saveState, setSaveState] = useState<"読み込み中" | "保存中" | "保存済み" | "ローカル保存">("読み込み中");
   const playerRef = useRef<React.ElementRef<typeof Player>>(null);
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const renderUrlRef = useRef<string | undefined>(undefined);
+  const selectedIdRef = useRef(selectedId);
+  const sceneListRef = useRef<HTMLDivElement>(null);
 
   const replaceRenderUrl = (nextUrl?: string) => {
     if (renderUrlRef.current) URL.revokeObjectURL(renderUrlRef.current);
@@ -204,6 +207,34 @@ export function VideoStudio() {
   }, []);
 
   useEffect(() => {
+    selectedIdRef.current = selectedId;
+    if (activeStep !== 3) return;
+    const frame = window.requestAnimationFrame(() => {
+      sceneListRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({block: "nearest"});
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeStep, selectedId]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (activeStep !== 3 || !player) return;
+
+    const syncSelectedChunk = ({detail}: {detail: {frame: number}}) => {
+      if (!player.isPlaying()) return;
+      const index = chunkIndexAtFrame(project.chunks, detail.frame, project.gapInSeconds, project.fps);
+      const chunkId = project.chunks[index]?.id;
+      if (!chunkId || selectedIdRef.current === chunkId) return;
+      selectedIdRef.current = chunkId;
+      setSelectedId(chunkId);
+      setSelectedAssetIndex(0);
+      setSelectedTextBlockId("");
+    };
+
+    player.addEventListener("frameupdate", syncSelectedChunk);
+    return () => player.removeEventListener("frameupdate", syncSelectedChunk);
+  }, [activeStep, project.chunks, project.fps, project.gapInSeconds]);
+
+  useEffect(() => {
     if (!hasLoaded || !project.title.trim()) return;
     const timer = window.setTimeout(async () => {
       setSaveState("保存中");
@@ -251,6 +282,7 @@ export function VideoStudio() {
   const selectChunk = (id: string) => {
     const index = project.chunks.findIndex((chunk) => chunk.id === id);
     setSelectedId(id);
+    selectedIdRef.current = id;
     setSelectedAssetIndex(0);
     setSelectedTextBlockId("");
     playerRef.current?.pause();
@@ -436,13 +468,21 @@ export function VideoStudio() {
   };
 
   const addChunk = () => {
+    const insertAfterId = selected?.id ?? "";
+    const insertIndex = selected ? selected.order + 1 : project.chunks.length;
     const chunk: LessonChunk = {
-      id: crypto.randomUUID(), order: project.chunks.length, displayText: "新しい解説文",
+      id: crypto.randomUUID(), order: insertIndex, displayText: "新しい解説文",
       speechText: "新しい解説文", durationInSeconds: 3, status: "draft",
     };
-    setProject((current) => ({...current, chunks: [...current.chunks, chunk]}));
-    setScript((current) => `${current.trim()}\n${chunk.displayText}`.trim());
+    const chunks = insertChunkAfter(project.chunks, insertAfterId, chunk);
+    setProject((current) => ({...current, chunks}));
+    setScript(chunks.map((item) => item.displayText).join("\n"));
     setSelectedId(chunk.id);
+    selectedIdRef.current = chunk.id;
+    setSelectedAssetIndex(0);
+    setSelectedTextBlockId("");
+    playerRef.current?.pause();
+    playerRef.current?.seekTo(chunkStartFrame(chunks, insertIndex, project.gapInSeconds, project.fps));
   };
 
   const addTextBlock = () => {
@@ -1003,7 +1043,7 @@ export function VideoStudio() {
               <button type="button" className="secondary-button full-width" onClick={applyScript}>シーンへ反映</button>
             </div>
           </details>
-          <div className="scene-list">
+          <div className="scene-list" ref={sceneListRef}>
             {project.chunks.length === 0 ? (
               <div className="empty-state"><Waveform size={30} /><p>台本を入力すると、ここにシーンが並びます。</p></div>
             ) : project.chunks.map((chunk) => {
@@ -1011,7 +1051,7 @@ export function VideoStudio() {
               const audioLabel = chunk.status === "generating" ? "音声生成中" : chunk.status === "error" ? "音声エラー" : chunk.audio ? "音声生成済み" : "音声未生成";
               const previewAsset = chunk.assets?.[0] ?? chunk.asset;
               return (
-                <button type="button" key={chunk.id} onClick={() => selectChunk(chunk.id)} className={"scene-card " + (isSelected ? "is-selected" : "")}>
+                <button type="button" key={chunk.id} aria-current={isSelected ? "true" : undefined} onClick={() => selectChunk(chunk.id)} className={"scene-card " + (isSelected ? "is-selected" : "")}>
                   <span className="scene-number">{String(chunk.order + 1).padStart(2, "0")}</span>
                   <span className="scene-thumbnail">
                     {previewAsset ? <Image src={previewAsset.previewUrl} alt={previewAsset.name} width={112} height={72} unoptimized /> : <span>{chunk.displayText.includes("$") ? "PV = nRT" : chunk.displayText.slice(0, 18)}</span>}
@@ -1107,12 +1147,25 @@ export function VideoStudio() {
                   </div>
                 </div>
 
-                <div className="settings-section-heading"><span>このチャンク</span><h3>テキスト</h3></div>
+                <div className="settings-section-heading">
+                  <div className="settings-section-heading__title"><span>このチャンク</span><h3>テキスト</h3></div>
+                  <button
+                    type="button"
+                    className="settings-collapse-button"
+                    aria-expanded={!collapsedSettings.text}
+                    aria-controls="scene-text-settings"
+                    onClick={() => setCollapsedSettings((current) => ({...current, text: !current.text}))}
+                  >
+                    {collapsedSettings.text ? "開く" : "畳む"}<CaretDown size={14} className={collapsedSettings.text ? "" : "is-open"} />
+                  </button>
+                </div>
+
+                {!collapsedSettings.text && <div id="scene-text-settings" className="settings-section-body">
 
                 <div className="form-group">
                   <div className="field-heading"><label htmlFor="display-text">表示テキスト</label><span>{selected.displayText.length}/300</span></div>
                   <textarea id="display-text" className="field text-area text-area--display" maxLength={300} value={selected.displayText} onFocus={() => { setSelectedTextBlockId(MAIN_TEXT_ELEMENT_ID); setSelectedAssetIndex(-1); }} onChange={(event) => updateChunk(selected.id, {displayText: event.target.value, status: "draft"})} />
-                  <p className="field-help">数式は <code>$PV=nRT$</code> または <code>$$...$$</code> で入力できます。</p>
+                  <p className="field-help">入力した改行は動画にも反映されます。数式は <code>$PV=nRT$</code> または <code>$$...$$</code> で入力できます。</p>
                 </div>
 
                 <div className={`text-style-panel ${selectedTextBlockId === MAIN_TEXT_ELEMENT_ID ? "is-selected" : ""}`} aria-label="テキストスタイル">
@@ -1257,6 +1310,7 @@ export function VideoStudio() {
                 }}>
                   <span><LinkSimple size={16} />AI連携</span><span>表示文から自動生成</span>
                 </button>
+                </div>}
 
                 <div className="settings-section-heading"><span>このチャンク</span><h3>音声</h3></div>
 
@@ -1288,8 +1342,19 @@ export function VideoStudio() {
                 </div>
                 <button type="button" className="secondary-button full-width" onClick={generateAllAudio}><SpeakerHigh size={16} />未生成の音声をすべて作る</button>
 
-                <div className="settings-section-heading"><span>このチャンク</span><h3>シーン素材</h3></div>
-                <section className="asset-section">
+                <div className="settings-section-heading">
+                  <div className="settings-section-heading__title"><span>このチャンク</span><h3>画像</h3></div>
+                  <button
+                    type="button"
+                    className="settings-collapse-button"
+                    aria-expanded={!collapsedSettings.image}
+                    aria-controls="scene-image-settings"
+                    onClick={() => setCollapsedSettings((current) => ({...current, image: !current.image}))}
+                  >
+                    {collapsedSettings.image ? "開く" : "畳む"}<CaretDown size={14} className={collapsedSettings.image ? "" : "is-open"} />
+                  </button>
+                </div>
+                {!collapsedSettings.image && <section id="scene-image-settings" className="asset-section settings-section-body">
                   <div className="field-heading"><h3>画像</h3><span>{selectedAssets.length}/12</span></div>
                   {selectedAssets.length > 0 && (
                     <div className="asset-grid">
@@ -1362,7 +1427,7 @@ export function VideoStudio() {
                       <div className="gallery-empty"><FileImage size={22} /><span>アップロードした画像がここに表示されます。</span></div>
                     )}
                   </div>
-                </section>
+                </section>}
               </div>
             ) : (
               <div className="inspector-content" role="tabpanel">

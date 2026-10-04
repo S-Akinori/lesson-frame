@@ -66,6 +66,25 @@ export const chunkStartFrame = (chunks: LessonChunk[], index: number, gapInSecon
 export const totalDurationInFrames = (chunks: LessonChunk[], gapInSeconds: number, fps: number) =>
   Math.max(1, chunks.reduce((sum, chunk) => sum + chunkDurationInFrames(chunk, gapInSeconds, fps), 0));
 
+export const chunkIndexAtFrame = (chunks: LessonChunk[], frame: number, gapInSeconds: number, fps: number) => {
+  if (!chunks.length) return -1;
+  const targetFrame = Math.max(0, Math.floor(frame));
+  let cursor = 0;
+  for (let index = 0; index < chunks.length; index += 1) {
+    cursor += chunkDurationInFrames(chunks[index], gapInSeconds, fps);
+    if (targetFrame < cursor) return index;
+  }
+  return chunks.length - 1;
+};
+
+export const insertChunkAfter = (chunks: LessonChunk[], selectedId: string, chunk: LessonChunk) => {
+  const selectedIndex = chunks.findIndex((item) => item.id === selectedId);
+  const insertIndex = selectedIndex >= 0 ? selectedIndex + 1 : chunks.length;
+  const nextChunks = [...chunks];
+  nextChunks.splice(insertIndex, 0, chunk);
+  return nextChunks.map((item, order) => ({...item, order}));
+};
+
 export const formatDuration = (seconds: number) => {
   const value = Math.max(0, Math.round(seconds));
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;

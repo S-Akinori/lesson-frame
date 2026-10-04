@@ -792,8 +792,30 @@ summary:focus-visible {
   padding-top: 16px;
 }
 .inspector-title-row + .settings-section-heading { margin-top: 6px; border-top: 0; padding-top: 0; }
+.settings-section-heading__title { display: grid; gap: 3px; }
 .settings-section-heading h3 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 720; }
 .settings-section-heading span { color: var(--muted); font-family: var(--font-geist-mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.settings-collapse-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  padding: 4px 0 4px 8px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+.settings-collapse-button:hover { color: var(--accent-deep); }
+.settings-collapse-button:active { transform: translateY(1px); }
+.settings-collapse-button svg { transition: transform 180ms ease; }
+.settings-collapse-button svg.is-open { transform: rotate(180deg); }
+.settings-section-body { animation: settings-section-reveal 180ms ease-out both; }
+@keyframes settings-section-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .settings-collapse-button svg { transition: none; }
+  .settings-section-body { animation: none; }
+}
 .field-heading { margin-bottom: 7px; }
 .field-heading label,
 .field-heading h3,

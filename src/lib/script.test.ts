@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {chunkDurationInFrames, chunkStartFrame, estimateDuration, parseScript, toSpeechText, totalDuration, totalDurationInFrames} from "./script";
+import {chunkDurationInFrames, chunkIndexAtFrame, chunkStartFrame, estimateDuration, insertChunkAfter, parseScript, toSpeechText, totalDuration, totalDurationInFrames} from "./script";
 
 describe("script pipeline", () => {
   it("treats each non-empty line as one chunk", () => {
@@ -33,5 +33,21 @@ describe("script pipeline", () => {
     expect(chunkStartFrame(chunks, 1, 0.15, 30)).toBe(95);
     expect(chunkStartFrame(chunks, 2, 0.15, 30)).toBe(190);
     expect(totalDurationInFrames(chunks, 0.15, 30)).toBe(285);
+  });
+
+  it("resolves the active chunk at exact frame boundaries", () => {
+    const chunks = parseScript("一行\n二行\n三行").map((chunk) => ({...chunk, durationInSeconds: 3}));
+    expect(chunkIndexAtFrame(chunks, 0, 0.15, 30)).toBe(0);
+    expect(chunkIndexAtFrame(chunks, 94, 0.15, 30)).toBe(0);
+    expect(chunkIndexAtFrame(chunks, 95, 0.15, 30)).toBe(1);
+    expect(chunkIndexAtFrame(chunks, 190, 0.15, 30)).toBe(2);
+  });
+
+  it("inserts a new chunk directly after the selected chunk", () => {
+    const chunks = parseScript("一行\n二行\n三行");
+    const inserted = {...parseScript("追加")[0], id: "inserted", order: 99};
+    const result = insertChunkAfter(chunks, chunks[0].id, inserted);
+    expect(result.map((chunk) => chunk.displayText)).toEqual(["一行", "追加", "二行", "三行"]);
+    expect(result.map((chunk) => chunk.order)).toEqual([0, 1, 2, 3]);
   });
 });
