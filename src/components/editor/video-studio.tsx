@@ -149,6 +149,7 @@ export function VideoStudio() {
   const [selectedId, setSelectedId] = useState(project.chunks[0]?.id ?? "");
   const [notice, setNotice] = useState<Notice>(null);
   const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState(0);
   const [renderUrl, setRenderUrl] = useState<string>();
   const [hasLoaded, setHasLoaded] = useState(false);
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
@@ -855,22 +856,51 @@ export function VideoStudio() {
   const renderVideo = async () => {
     if (!project.chunks.length) return;
     setIsRendering(true);
+    setRenderProgress(0);
     replaceRenderUrl();
-    setNotice({kind: "info", message: "フレーム生成とエンコードを開始しました。この画面を開いたままお待ちください。"});
+    setNotice({kind: "info", message: "このPCでフレーム生成とエンコードを開始しました。この画面を開いたままお待ちください。"});
     try {
-      const response = await fetch("/api/render", {
-        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(project),
+      const {canRenderMediaOnWeb, renderMediaOnWeb} = await import("@remotion/web-renderer");
+      const support = await canRenderMediaOnWeb({
+        container: "mp4",
+        videoCodec: "h264",
+        audioCodec: "aac",
+        width: project.width,
+        height: project.height,
       });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({error: "レンダリングに失敗しました。"})) as {error?: string};
-        throw new Error(result.error ?? "レンダリングに失敗しました。");
+      if (!support.canRender) {
+        const detail = support.issues.filter((issue) => issue.severity === "error").map((issue) => issue.message).join(" ");
+        throw new Error(`このブラウザはMP4書き出しに対応していません。最新版のChromeをお使いください。${detail ? ` ${detail}` : ""}`);
       }
-      const video = await response.blob();
+      const result = await renderMediaOnWeb({
+        composition: {
+          id: "LessonVideo",
+          component: LessonComposition,
+          durationInFrames,
+          fps: project.fps,
+          width: project.width,
+          height: project.height,
+          calculateMetadata: null,
+          defaultProps: {project},
+        },
+        inputProps: {project},
+        container: "mp4",
+        videoCodec: "h264",
+        audioCodec: "aac",
+        outputTarget: support.resolvedOutputTarget,
+        hardwareAcceleration: "prefer-hardware",
+        pageResponsiveness: "high",
+        delayRenderTimeoutInMilliseconds: 120_000,
+        onProgress: ({progress}) => setRenderProgress(Math.max(0, Math.min(1, progress))),
+      });
+      const video = await result.getBlob();
       if (!video.size) throw new Error("書き出した動画を取得できませんでした。");
       replaceRenderUrl(URL.createObjectURL(video));
+      setRenderProgress(1);
       setNotice({kind: "success", message: "MP4を書き出しました。動画はR2へ保存されず、このブラウザから直接保存できます。"});
     } catch (error) {
-      setNotice({kind: "error", message: error instanceof Error ? error.message : "レンダリングに失敗しました。"});
+      const detail = error instanceof Error ? error.message : "不明なエラー";
+      setNotice({kind: "error", message: `レンダリングに失敗しました：${detail}`});
     } finally {
       setIsRendering(false);
     }
@@ -1090,8 +1120,9 @@ export function VideoStudio() {
               <><p className="export-warning-note">未入力のテキストは空白、未生成の音声は無音として書き出されます。</p><button type="button" className="secondary-button full-width" onClick={() => setActiveStep(3)}>シーン編集で修正する</button></>
             )}
             <button type="button" className="generate-audio-button export-button" disabled={isRendering} onClick={renderVideo}>
-              {isRendering ? <SpinnerGap size={19} className="animate-spin" /> : <FilmSlate size={19} />}{isRendering ? "書き出し中" : "MP4を書き出す"}
+              {isRendering ? <SpinnerGap size={19} className="animate-spin" /> : <FilmSlate size={19} />}{isRendering ? `書き出し中 ${Math.round(renderProgress * 100)}%` : "MP4を書き出す"}
             </button>
+            {isRendering && <div className="render-progress render-progress--export"><div><span>このPCでエンコードしています</span><span>{Math.round(renderProgress * 100)}%</span></div><div className="render-progress-track"><span style={{width: `${renderProgress * 100}%`}} /></div></div>}
             {renderUrl && <a className="secondary-button full-width export-download" href={renderUrl} download={`${project.title || "lesson-frame"}.mp4`}><DownloadSimple size={17} />完成動画を保存</a>}
             <button type="button" className="text-button export-back" onClick={() => setActiveStep(3)}>シーン編集へ戻る</button>
           </aside>
@@ -1186,7 +1217,7 @@ export function VideoStudio() {
               <button type="button" className="secondary-button" disabled={!selected || selected.order >= project.chunks.length - 1} onClick={() => selected && selectChunk(project.chunks[selected.order + 1].id)}>次のシーン</button>
             </div>
           </div>
-          {isRendering && <div className="render-progress"><div><span>フレームをエンコードしています</span><span>H.264 / 1080p</span></div><div className="render-shimmer" /></div>}
+          {isRendering && <div className="render-progress"><div><span>このPCでエンコードしています</span><span>{Math.round(renderProgress * 100)}%</span></div><div className="render-progress-track"><span style={{width: `${renderProgress * 100}%`}} /></div></div>}
           <footer className="preview-footer">
             <div><strong>1920 × 1080</strong><span>YouTube landscape</span></div>
             <div><strong>30 fps · H.264</strong><span>AAC audio</span></div>

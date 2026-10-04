@@ -1,7 +1,8 @@
 import "katex/dist/katex.min.css";
+import {Audio} from "@remotion/media";
 import {useEffect, useRef} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {AbsoluteFill, Audio, Img, Sequence, useCurrentFrame, useVideoConfig} from "remotion";
+import {AbsoluteFill, Img, Sequence, useCurrentFrame, useVideoConfig} from "remotion";
 import {elementAnimationStyle} from "../../lib/element-animation";
 import {defaultMainTextLayout, defaultTextBlockLayout, getVideoFontFamily, resolveImageLayout} from "../../lib/scene-layout";
 import {chunkDurationInFrames} from "../../lib/script";

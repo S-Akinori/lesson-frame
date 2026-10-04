@@ -98,6 +98,6 @@ npm run render:demo
 
 - Next.js UI/API: Vercel
 - 画像・WAV・MP4: Cloudflare R2
-- 本番レンダリング: Vercel Sandbox推奨
+- MP4レンダリング: 利用中のブラウザ（WebCodecs）
 
-`/api/render`はローカル検証用の同一プロセスレンダラーも備えています。Vercel Sandboxへ移す場合は、このルートの`renderMedia()`処理をSandbox内コマンドに置き換え、入力JSONとR2キーを渡します。UIとRemotionコンポジションは変更不要です。
+MP4はRemotionのブラウザレンダラーを使い、利用中のPCで生成します。完成動画はVercel FunctionsやR2を経由せず、そのままブラウザから保存できます。WebCodecs対応の最新版Chromeを推奨します。

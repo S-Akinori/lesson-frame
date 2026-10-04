@@ -722,13 +722,14 @@ summary:focus-visible {
   padding: 12px;
 }
 .render-progress > div:first-child { display: flex; margin-bottom: 8px; justify-content: space-between; font-size: 10px; }
-.render-shimmer {
+.render-progress-track {
   height: 6px;
+  overflow: hidden;
   border-radius: 99px;
-  background: linear-gradient(90deg, rgba(200,91,61,.12), rgba(200,91,61,.48), rgba(200,91,61,.12));
-  background-size: 220% 100%;
-  animation: shimmer 1.7s ease-in-out infinite;
+  background: rgba(200,91,61,.12);
 }
+.render-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease-out; }
+.render-progress--export { margin: 10px 0 0; width: 100%; text-align: left; }
 
 .preview-footer {
   display: grid;
@@ -1190,7 +1191,6 @@ summary:focus-visible {
 .empty-state p { max-width: 22ch; margin: 0; font-size: 11px; line-height: 1.6; }
 .empty-state--inspector { margin: 24px 18px; }
 
-@keyframes shimmer { to { background-position: -120% 0; } }
 
 @media (max-width: 1280px) {
   .studio-shell { grid-template-columns: 270px minmax(480px,1fr) 350px; }
